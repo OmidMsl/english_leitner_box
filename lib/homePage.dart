@@ -1,36 +1,40 @@
+import 'dart:convert';
+
 import 'package:english_leitner_box/Word.dart';
 import 'package:english_leitner_box/addOrEditWord.dart';
 import 'package:english_leitner_box/conactUs.dart';
 import 'package:english_leitner_box/reviewPage.dart';
 import 'package:english_leitner_box/wordsPage.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shamsi_date/shamsi_date.dart';
+import 'dart:io';
 
 //home page
 class HomePage extends StatefulWidget {
-  BuildContext buildContext;
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  BuildContext scaffoldContext;
   String lastReview = '';
   int absentDays = -1;
   List<Word> forReview;
   Future words;
   ScrollController _scrollController;
-  bool _fabExtend = true,
-      upDirection = true,
-      flag = true;
+  bool _fabExtend = true, upDirection = true, flag = true;
+  String _path;
 
   @override
   void initState() {
     // TODO: implement initState
-    
+
     // getting the words from databse
     words = WordDBHelper.instance.retrieveWords();
-    
+
     // to extend floating action button after scrolling down
     _scrollController = ScrollController()
       ..addListener(() {
@@ -50,23 +54,26 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    widget.buildContext = context;
-
+    scaffoldContext = context;
     return FutureBuilder<List<Word>>(
         future: words,
         builder: (context, snapshot) {
-          if (snapshot.hasData && snapshot.data.isNotEmpty) { // if there is eny words
+          if (snapshot.hasData && snapshot.data.isNotEmpty) {
+            // if there is eny words
             List<Word> allWords = snapshot.data;
-            DateTime lastR = allWords[0].lastReview; // for finding lastest review
+            DateTime lastR =
+                allWords[0].lastReview; // for finding lastest review
             if (lastR == null) {
               lastR = DateTime.fromMillisecondsSinceEpoch(0);
             }
             // 00:00 of today
             DateTime d = DateTime.now();
-            d = DateTime.fromMillisecondsSinceEpoch(d.millisecondsSinceEpoch -
-                (d.millisecondsSinceEpoch % 86400000));
+            d = DateTime.fromMillisecondsSinceEpoch(
+                d.millisecondsSinceEpoch -
+                    (d.millisecondsSinceEpoch % 86400000),
+                isUtc: true);
 
-	     // these words need to be reviewed
+            // these words need to be reviewed
             forReview = List();
             for (Word word in allWords) {
               if (word.lastReview != null && word.lastReview.isAfter(lastR)) {
@@ -78,10 +85,7 @@ class _HomePageState extends State<HomePage> {
                 forReview.add(word);
               }
             }
-            absentDays =
-                ((d.millisecondsSinceEpoch - lastR.millisecondsSinceEpoch) /
-                        86400000)
-                    .round();
+            absentDays = d.difference(lastR).inDays;
             // convert georgian date to shamsi date
             Jalali j = Jalali.fromDateTime(lastR);
             List<String> monthes = [
@@ -232,32 +236,35 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                     ),
-                    Card(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text('گرفتن پشتیبان از کلمات',
-                                style: TextStyle(fontFamily: 'Vazir')),
-                            Text('(در نسخه های آینده)',
-                                style: TextStyle(fontFamily: 'Vazir'))
-                          ],
+                    InkWell(
+                      onTap: () => saveToFile(),
+                      child: Card(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Text('گرفتن پشتیبان از کلمات',
+                                  style: TextStyle(fontFamily: 'Vazir')),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    Card(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text(
-                              'وارد کردن کلمات از فایل پشتیبان',
-                              style: TextStyle(fontFamily: 'Vazir'),
-                              textAlign: TextAlign.center,// manage text overflow
-                            ),
-                            Text('(در نسخه های آینده)',
-                                style: TextStyle(fontFamily: 'Vazir'))
-                          ],
+                    InkWell(
+                      onTap: () => getWordsFromFile(),
+                      child: Card(
+                        child: Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: <Widget>[
+                              Text(
+                                'وارد کردن کلمات از فایل پشتیبان',
+                                style: TextStyle(fontFamily: 'Vazir'),
+                                textAlign:
+                                    TextAlign.center, // manage text overflow
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -296,7 +303,8 @@ class _HomePageState extends State<HomePage> {
                     icon: _fabExtend ? Icon(Icons.add) : null,
                   )),
             );
-          } else { // if there is no word
+          } else {
+            // if there is no word
             return Container(
               color: Colors.blue[700],
               child: Center(
@@ -349,7 +357,8 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  void addWord(BuildContext context) async { // go to add word page
+  void addWord(BuildContext context) async {
+    // go to add word page
     Navigator.of(context)
         .push(MaterialPageRoute(builder: (context) => AddOrEditWord()))
         .then((value) {
@@ -359,5 +368,104 @@ class _HomePageState extends State<HomePage> {
     });
   }
 
-  void getWordsFromFile() {} // for next updates
+  void getWordsFromFile() async {
+    if (await Permission.storage.isGranted) {
+      try {
+        _path = await _importPath;
+        if (_path != null) {
+          File file = File(_path);
+          String jsonStr = await file.readAsString();
+
+          final parsed = jsonDecode(jsonStr).cast<Map<String, dynamic>>();
+
+          List<Word> newWords =
+              parsed.map<Word>((json) => Word.fromJson(json)).toList();
+
+          int numOfNews = 0;
+          for (Word w in newWords) {
+            Future f = WordDBHelper.instance.isUnique(-1, w.word);
+            bool unique = true;
+            await f.then((value) {
+              unique = (value.toString() == '[]');
+            });
+            if (unique) {
+              await WordDBHelper.instance.insertWord(w);
+              numOfNews++;
+            }
+          }
+          createSnackBar(numOfNews == 0
+              ? 'کلمه جدیدی اضافه نشد.'
+              : numOfNews.toString() + 'کلمه جدید اضافه شد ');
+          setState(() {
+            words = WordDBHelper.instance.retrieveWords();
+          });
+        }
+      } catch (e) {
+        createSnackBar('خطا: \n' + e.toString());
+      }
+    } else {
+      await Permission.storage.request();
+    }
+  }
+
+  void saveToFile() async {
+    if (await Permission.storage.isGranted) {
+      try {
+        String path = await _exportPath;
+        if (path != null) {
+          String folderName = path.substring(path.lastIndexOf('/') + 1);
+          path = await path + '/Leitner_box_words';
+          bool isExists = true;
+
+          int i = 0;
+          for (; isExists; i++) {
+            _path = path + (i == 0 ? '' : i.toString()) + '.json';
+            isExists = await _isNameValid;
+          }
+
+          final file = File(_path);
+
+          String jsonStr;
+          words.then((value3) {
+            jsonStr =
+                jsonEncode(value3, toEncodable: (e) => (e as Word).toMap());
+            file.writeAsString(jsonStr);
+            createSnackBar(' فایل پشتیبان با نام' +
+                ' Leitner_box_words' +
+                (i == 0 ? '' : i.toString()) +
+                ' در پوشه ' +
+                folderName +
+                ' ذخیره شد. ');
+          });
+        }
+      } catch (e) {
+        createSnackBar('خطا: \n' + e.toString());
+      }
+    } else {
+      await Permission.storage.request();
+    }
+  }
+
+  Future<String> get _exportPath {
+    return FilePicker.getDirectoryPath();
+  }
+
+  Future<String> get _importPath {
+    return FilePicker.getFilePath(
+        type: FileType.custom, allowedExtensions: ['json']);
+  }
+
+  Future<bool> get _isNameValid {
+    return FileSystemEntity.isFile(_path);
+  }
+
+  void createSnackBar(String message) {
+    final snackBar = new SnackBar(
+        content: new Text(
+      message,
+      textDirection: TextDirection.rtl,
+    ));
+    // Find the Scaffold in the Widget tree and use it to show a SnackBar!
+    Scaffold.of(scaffoldContext).showSnackBar(snackBar);
+  }
 }

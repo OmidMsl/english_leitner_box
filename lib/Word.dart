@@ -28,6 +28,13 @@ class Word {
           isLastReviewSuessful == null ? 0 : isLastReviewSuessful ? 1 : 0
     };
   }
+
+  factory Word.fromJson(Map<String, dynamic> json) {
+    return Word(
+      word: json['word'] as String,
+      translation: json['translation'] as String,
+    );
+  }
 }
 
 // word database helper
