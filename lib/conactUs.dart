@@ -17,15 +17,17 @@ class _ContactUsState extends State<ContactUs> {
       appBar: AppBar(
         title: Text(
           'تماس با ما',
-          style: TextStyle(color: Colors.black87, fontFamily: 'Vazir'),
+          style: TextStyle(color: Colors.black87, fontFamily: 'Homa'),
         ),
         centerTitle: true,
         backgroundColor: Colors.white,
       ),
-      body: SingleChildScrollView( // make page scrollable
+      body: SingleChildScrollView(
+        // make page scrollable
         child: Center(
           child: Card(
-            shape: RoundedRectangleBorder( // rouding edges of the page
+            shape: RoundedRectangleBorder(
+                // rouding edges of the page
                 borderRadius: BorderRadius.circular(10.0)),
             color: Colors.white,
             child: Center(
@@ -63,7 +65,7 @@ class _ContactUsState extends State<ContactUs> {
                         scheme: 'mailto',
                         path: 'omid.intelligent@gmail.com',
                         query:
-                            'subject=ارسال نظر Feedback&body=سلام Version 3.23', //add subject and body here
+                            'subject=ارسال نظر Feedback&body=سلام Version 1.0.0', //add subject and body here
                       );
                       var url = params.toString();
                       if (await canLaunch(url)) launch(url);
@@ -150,26 +152,32 @@ class _ContactUsState extends State<ContactUs> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.only(top: 32, left: 8.0, right: 8.0),
-                    child: Text('این برنامه رایگان و منبع باز بوده و در گیت هاب قابل دسترسی است',
-                    textAlign: TextAlign.center,
-                    style: ts,)
-                  ),
+                      padding:
+                          const EdgeInsets.only(top: 32, left: 8.0, right: 8.0),
+                      child: Text(
+                        'این برنامه رایگان و منبع باز بوده و در گیت هاب قابل دسترسی است',
+                        textAlign: TextAlign.center,
+                        style: ts,
+                      )),
                   InkWell(
                     onTap: () async {
-                      const url = "https://github.com/OmidMsl/english_leitner_box/";
+                      const url =
+                          "https://github.com/OmidMsl/english_leitner_box/";
                       if (await canLaunch(url)) launch(url);
                     },
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: <Widget>[
-                        Text('@byte_counting_test                 '),
-                        Image.asset(
-                          'images/github.png',
-                          height: 30,
-                          width: 30,
-                        )
-                      ],
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: <Widget>[
+                          Text('OmidMsl/english_leitner_box         '),
+                          Image.asset(
+                            'images/github.png',
+                            height: 30,
+                            width: 30,
+                          )
+                        ],
+                      ),
                     ),
                   ),
                 ],

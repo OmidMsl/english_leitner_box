@@ -21,10 +21,12 @@ class __AlertDialog extends StatefulWidget {
   final Color color;
   final String title, message, positiveText, negativeText, neutralText;
   final Function positiveAction, negativeAction, neutralAction;
-  final bool showNeutralButton;
+  final bool showNeutralButton, showTextField;
   final int icon;
   final bool confirm;
   final TextAlign textAlign;
+  final TextEditingController inputTextController;
+  bool validReason;
 
   __AlertDialog({
     @required this.color,
@@ -40,6 +42,9 @@ class __AlertDialog extends StatefulWidget {
     this.icon,
     this.confirm,
     this.textAlign,
+    this.showTextField,
+    this.inputTextController,
+    this.validReason,
   });
 
   @override
@@ -47,7 +52,7 @@ class __AlertDialog extends StatefulWidget {
 }
 
 class __AlertDialogState extends State<__AlertDialog> {
-  bool _confirmDeleteAction = false;
+  bool _confirmDeleteAction = false, _enableTextField = false;
 
   final successIcon = Icon(
     Icons.check,
@@ -126,8 +131,12 @@ class __AlertDialogState extends State<__AlertDialog> {
   _getPositiveButtonColor() {
     var color = Colors.black;
     if (widget.confirm) {
-      if (_confirmDeleteAction) {
-        color = Colors.red;
+      if (_confirmDeleteAction && widget.validReason) {
+        if (widget.showTextField) {
+          color = Colors.blue[900];
+        } else {
+          color = Colors.red;
+        }
       } else {
         color = Colors.grey;
       }
@@ -145,7 +154,7 @@ class __AlertDialogState extends State<__AlertDialog> {
           widget.positiveText,
           textDirection: TextDirection.rtl,
           style: TextStyle(
-            fontFamily: "Vazir",
+            fontFamily: "Homa",
             color: Color(0xff00003f), //_getPositiveButtonColor(),
           ),
         ),
@@ -161,7 +170,7 @@ class __AlertDialogState extends State<__AlertDialog> {
           Navigator.of(context).pop(); // To close the dialog
           widget.negativeAction();
         },
-        child: Text(widget.negativeText),
+        child: Text(widget.negativeText, style: TextStyle(fontFamily: 'Homa'),),
       );
     }
     return SizedBox();
@@ -213,75 +222,99 @@ class __AlertDialogState extends State<__AlertDialog> {
               ),
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, // To make the card compact
-            children: <Widget>[
-              Text(
-                widget.title,
-                style: TextStyle(
-                  fontSize: 24.0,
-                  fontFamily: "Vazir",
-                  fontWeight: FontWeight.w700,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min, // To make the card compact
+              children: <Widget>[
+                Text(
+                  widget.title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20.0,
+                    fontFamily: "Homa",
+                    fontWeight: FontWeight.w700,
+                  ),
+                  textDirection: TextDirection.rtl,
                 ),
-              ),
-              SizedBox(height: 16.0),
-              Flexible(
-                fit: FlexFit.loose,
-                child: SingleChildScrollView(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Text(
-                      widget.message,
-                      textAlign: widget.textAlign == null
-                          ? TextAlign.center
-                          : widget.textAlign,
-                      style: TextStyle(
-                        fontFamily: "Vazir",
-                        fontSize: 16.0,
+                SizedBox(height: 16.0),
+                Flexible(
+                  fit: FlexFit.loose,
+                  child: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Text(
+                        widget.message,
+                        textAlign: widget.textAlign == null
+                            ? TextAlign.center
+                            : widget.textAlign,
+                        style: TextStyle(
+                          fontFamily: "Vazir",
+                          fontSize: 14.0,
+                        ),
+                        textDirection: TextDirection.rtl,
                       ),
                     ),
                   ),
                 ),
-              ),
-              SizedBox(height: 16.0),
-              if (widget.confirm)
-                Row(
-                  children: <Widget>[
-                    Checkbox(
-                      value: _confirmDeleteAction,
-                      onChanged: (value) {
-                        setState(() {
-                          _confirmDeleteAction = value;
-                        });
-                      },
+                SizedBox(height: 16.0),
+                if (widget.confirm)
+                  Row(
+                    children: <Widget>[
+                      Checkbox(
+                        value: _enableTextField,
+                        onChanged: (value) {
+                          setState(() {
+                            _enableTextField = value;
+                          });
+                        },
+                      ),
+                      Text("تغیر نام"),
+                    ],
+                  ),
+                Visibility(
+                  visible:
+                      widget.showTextField == null ? false : widget.showTextField,
+                  child: TextField(
+                    enabled: _enableTextField,
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(), labelText: "نام جدید"),
+                    maxLines: 1,
+                    onChanged: (value) {
+                      setState(() {
+                        _confirmDeleteAction = value.trim().isNotEmpty;
+                      });
+                    },
+                    controller: widget.inputTextController,
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: <Widget>[
+                        _negativeButton(context),
+                        _positiveButton(context),
+                        widget.showNeutralButton
+                            ? FlatButton(
+                                onPressed: () {
+                                  Navigator.of(context)
+                                      .pop(); // To close the dialog
+                                  widget.neutralAction();
+                                },
+                                child: Text(widget.neutralText,
+                                    style: TextStyle(
+                                        fontFamily: "Vazir",
+                                        color: Colors.red[900])),
+                              )
+                            : SizedBox(),
+                      ],
                     ),
-                    Text("Check this box for confirmation!"),
-                  ],
+                  ),
                 ),
-              Align(
-                alignment: Alignment.bottomRight,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: <Widget>[
-                    _negativeButton(context),
-                    _positiveButton(context),
-                    widget.showNeutralButton
-                        ? FlatButton(
-                            onPressed: () {
-                              Navigator.of(context)
-                                  .pop(); // To close the dialog
-                              widget.neutralAction();
-                            },
-                            child: Text(widget.neutralText,
-                                style: TextStyle(
-                                    fontFamily: "Vazir",
-                                    color: Colors.red[900])),
-                          )
-                        : SizedBox(),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
         Positioned(
@@ -315,6 +348,9 @@ dialog(
   icon = 0,
   confirm = false,
   textAlign: TextAlign.center,
+  TextEditingController inputTextController,
+  bool validReason,
+  bool showTextField,
 }) {
   return showDialog(
     barrierDismissible: closeOnBackPress,
@@ -335,6 +371,9 @@ dialog(
         icon: icon,
         confirm: confirm,
         textAlign: textAlign,
+        inputTextController: inputTextController,
+        validReason: validReason,
+        showTextField: showTextField,
       ),
     ),
   );
@@ -509,6 +548,46 @@ confirmationDialog(
     icon: icon,
     confirm: confirm,
     textAlign: textAlign,
+  );
+}
+
+sameNameDialog(
+  BuildContext context,
+  String message, {
+  showNeutralButton = true,
+  String positiveText = 'تغیر نام',
+  Function positiveAction,
+  String negativeText = 'ادغام',
+  Function negativeAction,
+  String neutralText = "لغو",
+  Function neutralAction,
+  title = "Confirmation?",
+  closeOnBackPress = false,
+  icon = __AlertDialog.HELP_ICON,
+  confirm: true,
+  textAlign: TextAlign.center,
+  TextEditingController inputTextController,
+  bool validReason,
+}) {
+  return dialog(
+    context,
+    __AlertDialog.WARNING,
+    title,
+    message,
+    showNeutralButton,
+    closeOnBackPress,
+    neutralText: neutralText,
+    neutralAction: neutralAction == null ? () {} : neutralAction,
+    positiveText: positiveText,
+    positiveAction: positiveAction,
+    negativeText: negativeText,
+    negativeAction: negativeAction,
+    icon: icon,
+    confirm: confirm,
+    textAlign: textAlign,
+    inputTextController: inputTextController,
+    validReason: validReason,
+    showTextField: true,
   );
 }
 

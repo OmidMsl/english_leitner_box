@@ -1,6 +1,6 @@
 # english_leitner_box
 
-A leitner box for english to persian words
+A persian leitner box app.
 
 ## About Project
 

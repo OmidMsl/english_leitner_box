@@ -1,30 +1,36 @@
-import 'package:english_leitner_box/Word.dart';
+import 'package:english_leitner_box/Card.dart' as litBox;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-// this page is for creating or editing a word
-class AddOrEditWord extends StatefulWidget {
-  Word word;
-  AddOrEditWord({this.word});
+// this page is for creating or editing a card
+class AddOrEditCard extends StatefulWidget {
+  litBox.Card card;
+  int categoryId;
+  AddOrEditCard(this.categoryId, {this.card});
   @override
-  _AddOrEditWordState createState() => _AddOrEditWordState();
+  _AddOrEditCardState createState() => _AddOrEditCardState();
 }
 
-class _AddOrEditWordState extends State<AddOrEditWord> {
+class _AddOrEditCardState extends State<AddOrEditCard> {
+  // for manage scroll of screen
   bool upDirection = true, flag = true, _extendFab = true;
   ScrollController _scrollController;
+
+  // BuildContext for creating snakpar
   BuildContext scaffoldContext;
 
-  final wordTextController = TextEditingController();
-  final translationTextController = TextEditingController();
+  //text controller for text fields
+  final frontTextController = TextEditingController();
+  final backTextController = TextEditingController();
 
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
-    if (widget.word != null) { // edit mode
-      wordTextController.text = widget.word.word;
-      translationTextController.text = widget.word.translation;
+    if (widget.card != null) {
+      // edit mode
+      frontTextController.text = widget.card.front;
+      backTextController.text = widget.card.back;
     }
     // to extend floating action button after scrolling down
     _scrollController = ScrollController()
@@ -45,8 +51,8 @@ class _AddOrEditWordState extends State<AddOrEditWord> {
   @override
   void dispose() {
     super.dispose();
-    wordTextController.dispose();
-    translationTextController.dispose();
+    frontTextController.dispose();
+    backTextController.dispose();
   }
 
   @override
@@ -55,8 +61,8 @@ class _AddOrEditWordState extends State<AddOrEditWord> {
       home: Scaffold(
           backgroundColor: Colors.pink,
           appBar: AppBar(
-            title: Text(widget.word == null ? ("کلمه جدید") : 'ویرایش کلمه',
-                style: TextStyle(color: Colors.black54, fontFamily: "Vazir")),
+            title: Text(widget.card == null ? ("کارت جدید") : 'ویرایش کارت',
+                style: TextStyle(color: Colors.black54, fontFamily: "Homa")),
             centerTitle: true,
             backgroundColor: Colors.white,
             leading: IconButton(
@@ -71,38 +77,42 @@ class _AddOrEditWordState extends State<AddOrEditWord> {
           ),
           body: new Builder(builder: (BuildContext context) {
             scaffoldContext = context;
-            return SingleChildScrollView( // make page scrollable
+            return SingleChildScrollView(
+              // make page scrollable
               controller: _scrollController,
               child: Container(
                 color: Colors.pink,
                 child: Card(
                   margin: EdgeInsets.all(10),
                   color: Colors.white,
-                  shape: RoundedRectangleBorder( // rouding edges of the page
+                  shape: RoundedRectangleBorder(
+                      // rouding edges of the page
                       borderRadius: BorderRadius.all(Radius.circular(10.0))),
                   child: Column(
                     children: <Widget>[
                       Padding(
                         padding: const EdgeInsets.only(
                             left: 16, right: 16, bottom: 16, top: 25),
-                        child: TextField( // text field for english word
+                        child: TextField(
+                          // text field for front of card
                           decoration: InputDecoration(
                               border: OutlineInputBorder(),
-                              labelText: "(کلمه (انگلیسی"),
+                              labelText: "جلوی کارت"),
                           maxLines: 1,
-                          controller: wordTextController,
+                          controller: frontTextController,
                         ),
                       ),
                       Padding(
                         padding: const EdgeInsets.only(
                             top: 16, left: 16, right: 16, bottom: 25),
-                        child: TextField( // text field for translation of the word
+                        child: TextField(
+                          // text field for behind of the card
                           keyboardType: TextInputType.text,
                           decoration: InputDecoration(
                               border: OutlineInputBorder(),
-                              labelText: "(ترجمه (فارسی یا انگلیسی"),
+                              labelText: "پشت کارت"),
                           maxLines: 1,
-                          controller: translationTextController,
+                          controller: backTextController,
                         ),
                       ),
                     ],
@@ -113,59 +123,64 @@ class _AddOrEditWordState extends State<AddOrEditWord> {
           }),
           floatingActionButton: _extendFab // fab
               ? FloatingActionButton.extended(
-                  onPressed: saveWord(),
+                  onPressed: saveCard(),
                   backgroundColor: Colors.green,
                   label: Text("ذخیره",
                       style: TextStyle(fontSize: 14, fontFamily: "Vazir")),
                   icon: Icon(Icons.save))
               : FloatingActionButton(
-                  onPressed: saveWord(),
+                  onPressed: saveCard(),
                   backgroundColor: Colors.green,
                   child: Icon(Icons.save))),
     );
   }
 
   // saving into database
-  Function saveWord() {
+  Function saveCard() {
     return () async {
-      if (wordTextController.text.trim() == "") // when the word is not valid
-        createSnackBar('.لطفا کلمه را وارد کنید');
-      else if (translationTextController.text.trim() == "") // when the translation is not valid
-        createSnackBar('.لطفا ترجمه را وارد کنید');
+      if (frontTextController.text.trim() == "") // when the card is not valid
+        createSnackBar('.لطفا جلوی کارت را وارد کنید');
+      else if (backTextController.text.trim() ==
+          "") // when the translation is not valid
+        createSnackBar('.لطفا پشت کارت را وارد کنید');
       else {
-        if (widget.word == null) { // if create mode
-          // check if the word dosent entered before
-          Future f =
-              WordDBHelper.instance.isUnique(-1, wordTextController.text);
+        if (widget.card == null) {
+          // if create mode
+          // check if the card dosent entered before
+          Future f = litBox.CardDBHelper.instance
+              .isUnique(-1, frontTextController.text.trim(), widget.categoryId);
           bool unique = true;
           await f.then((value) {
             unique = (value.toString() == '[]');
           });
           if (!unique)
-            createSnackBar('.کلمه وارد شده تکراری است');
-          else { // if word is valid inserts the word
-            Word w = Word(
-              word: wordTextController.text,
-              translation: translationTextController.text,
-            );
-            WordDBHelper.instance.insertWord(w);
-            Navigator.pop(context, w);
+            createSnackBar('.کارت وارد شده تکراری است');
+          else {
+            // if card is valid inserts the card
+            litBox.Card c = litBox.Card(
+                front: frontTextController.text,
+                back: backTextController.text,
+                boxLocation: 0);
+            litBox.CardDBHelper.instance.insertCard(c, widget.categoryId);
+            Navigator.pop(context, c);
           }
-        } else { //if edit mode
-          Future f = WordDBHelper.instance
-              .isUnique(widget.word.id, wordTextController.text);
+        } else {
+          //if edit mode
+          Future f = litBox.CardDBHelper.instance.isUnique(
+              widget.card.id, frontTextController.text, widget.categoryId);
           bool unique = true;
           await f.then((value) {
             unique = (value.toString() == '[]');
           });
           if (!unique)
-            createSnackBar('.کلمه وارد شده تکراری است');
-          else { // if word is valid updates the word
-            Word w = Word(
-                id: widget.word.id,
-                word: wordTextController.text,
-                translation: translationTextController.text);
-            WordDBHelper.instance.updateWord(w);
+            createSnackBar('.کارت وارد شده تکراری است');
+          else {
+            // if card is valid updates the card
+            litBox.Card w = litBox.Card(
+                id: widget.card.id,
+                front: frontTextController.text,
+                back: backTextController.text);
+            litBox.CardDBHelper.instance.updateCard(w, widget.categoryId);
             Navigator.pop(context, w);
           }
         }

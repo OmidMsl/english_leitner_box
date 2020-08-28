@@ -1,10 +1,12 @@
 import 'dart:convert';
 
-import 'package:english_leitner_box/Word.dart';
-import 'package:english_leitner_box/addOrEditWord.dart';
+import 'package:english_leitner_box/Category.dart';
+import 'package:english_leitner_box/Card.dart' as litBox;
+import 'package:english_leitner_box/addOrEditCard.dart';
+import 'package:english_leitner_box/alert_dialogs.dart';
 import 'package:english_leitner_box/conactUs.dart';
 import 'package:english_leitner_box/reviewPage.dart';
-import 'package:english_leitner_box/wordsPage.dart';
+import 'package:english_leitner_box/cardsPage.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -14,6 +16,9 @@ import 'dart:io';
 
 //home page
 class HomePage extends StatefulWidget {
+  final Category category;
+  Function() refreshCategories;
+  HomePage(this.category, this.refreshCategories);
   @override
   _HomePageState createState() => _HomePageState();
 }
@@ -22,8 +27,8 @@ class _HomePageState extends State<HomePage> {
   BuildContext scaffoldContext;
   String lastReview = '';
   int absentDays = -1;
-  List<Word> forReview;
-  Future words;
+  int numOfNotReviewed = 0;
+  Future cards;
   ScrollController _scrollController;
   bool _fabExtend = true, upDirection = true, flag = true;
   String _path;
@@ -31,9 +36,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     // TODO: implement initState
-
-    // getting the words from databse
-    words = WordDBHelper.instance.retrieveWords();
 
     // to extend floating action button after scrolling down
     _scrollController = ScrollController()
@@ -54,15 +56,18 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    // getting the cards from databse
+    cards = litBox.CardDBHelper.instance.retrieveCards(widget.category.id);
+    Size size = MediaQuery.of(context).size;
     scaffoldContext = context;
-    return FutureBuilder<List<Word>>(
-        future: words,
+    return FutureBuilder<List<litBox.Card>>(
+        future: cards,
         builder: (context, snapshot) {
           if (snapshot.hasData && snapshot.data.isNotEmpty) {
-            // if there is eny words
-            List<Word> allWords = snapshot.data;
+            // if there is eny cards
+            List<litBox.Card> allCards = snapshot.data;
             DateTime lastR =
-                allWords[0].lastReview; // for finding lastest review
+                allCards[0].lastReview; // for finding lastest review
             if (lastR == null) {
               lastR = DateTime.fromMillisecondsSinceEpoch(0);
             }
@@ -73,16 +78,19 @@ class _HomePageState extends State<HomePage> {
                     (d.millisecondsSinceEpoch % 86400000),
                 isUtc: true);
 
-            // these words need to be reviewed
-            forReview = List();
-            for (Word word in allWords) {
-              if (word.lastReview != null && word.lastReview.isAfter(lastR)) {
-                lastR = word.lastReview;
+            numOfNotReviewed = 0;
+            for (litBox.Card card in allCards) {
+              // calculate date and time of last review
+              if (card.lastReview != null && card.lastReview.isAfter(lastR)) {
+                lastR = card.lastReview;
               }
-              if (word.lastReview == null ||
-                  word.lastReview.isBefore(d) ||
-                  !word.isLastReviewSuessful) {
-                forReview.add(word);
+              // calculate today words
+              if (card.lastReview == null || card.lastReview.isBefore(d)) {
+                if (card.boxLocation == 0 ||
+                    card.boxLocation == 2 ||
+                    card.boxLocation == 6 ||
+                    card.boxLocation == 14 ||
+                    card.boxLocation == 30) numOfNotReviewed++;
               }
             }
             absentDays = d.difference(lastR).inDays;
@@ -105,208 +113,270 @@ class _HomePageState extends State<HomePage> {
 
             lastReview = lastR.millisecondsSinceEpoch == 0
                 ? 'هیچ وقت'
-                : WordsPage.replaceWithArabicNumbers(j.day.toString()) +
+                : CardsPage.replaceWithArabicNumbers(j.day.toString()) +
                     ' ' +
                     monthes[j.month - 1] +
                     ' ' +
-                    WordsPage.replaceWithArabicNumbers(j.year.toString()) +
-                    ' ساعت ' +
-                    WordsPage.replaceWithArabicNumbers(lastR.hour.toString()) +
+                    CardsPage.replaceWithArabicNumbers(j.year.toString()) +
+                    '\n'
+                        ' ساعت ' +
+                    CardsPage.replaceWithArabicNumbers(lastR.hour.toString()) +
                     ':' +
-                    WordsPage.replaceWithArabicNumbers(lastR.minute.toString());
-            return Scaffold(
-              backgroundColor: Colors.blue[700],
-              appBar: AppBar(
-                title: Text('جعبه لایتنر',
-                    style:
-                        TextStyle(color: Colors.black54, fontFamily: "Vazir")),
-                centerTitle: true,
-                backgroundColor: Colors.white,
-              ),
-              body: Padding(
-                padding: const EdgeInsets.only(
-                    left: 8.0, top: 4.0, right: 8.0, bottom: 4.0),
-                child: GridView.count(
-                  controller: _scrollController,
-                  crossAxisCount: 2,
-                  children: <Widget>[
-                    Card(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text(': آخرین مرور',
-                                style: TextStyle(fontFamily: 'Vazir')),
-                            Text(lastReview,
-                                style: TextStyle(
-                                    fontFamily: 'Vazir',
-                                    color: absentDays == 0
-                                        ? Colors.green[900]
-                                        : absentDays < 3
-                                            ? Colors.amber[700]
-                                            : Colors.red)),
-                            Padding(
-                              padding: const EdgeInsets.only(top: 8.0),
-                              child: RaisedButton(
-                                  child: Text(
-                                    'مرور همه کلمات',
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                        fontFamily: 'Vazir'),
-                                  ),
-                                  color: Colors.deepPurple,
-                                  onPressed: () {
-                                    Navigator.of(context)
-                                        .push(MaterialPageRoute(
-                                            builder: (context) => ReviewPage(
-                                                  words: allWords,
-                                                  isAll: true,
-                                                )))
-                                        .then((value) {
-                                      setState(() {
-                                        words = WordDBHelper.instance
-                                            .retrieveWords();
-                                      });
+                    CardsPage.replaceWithArabicNumbers(lastR.minute < 10
+                        ? '0' + lastR.minute.toString()
+                        : lastR.minute.toString());
+            return Container(
+              // gradient for background of page
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                    Color(0xff04cfe2),
+                    Color(0xff0f9dd6),
+                    Color(0xff041554)
+                  ])),
+              child: Scaffold(
+                backgroundColor: Colors.transparent,
+                body: SingleChildScrollView(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      Column(
+                        // left buttons
+                        children: [
+                          // tomarrow review button
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                            child: InkWell(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Image.asset(
+                                      numOfNotReviewed == 0
+                                          ? 'images/tomorrow_cards.png'
+                                          : 'images/tomorrow_cards_gray.png',
+                                      width: (size.width / 2) - 16),
+                                  Padding(
+                                      padding: const EdgeInsets.only(
+                                          left: 64.0, top: 32.0),
+                                      child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: <Widget>[
+                                            Text(': آخرین مرور',
+                                                style: TextStyle(
+                                                    fontFamily: 'Homa')),
+                                            Text(lastReview,
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                    fontFamily: 'Homa',
+                                                    color: absentDays == 0
+                                                        ? Colors.green[900]
+                                                        : absentDays < 3
+                                                            ? Colors.amber[700]
+                                                            : Colors.red,
+                                                    fontSize: 12)),
+                                          ]))
+                                ],
+                              ),
+                              onTap: () {
+                                if (numOfNotReviewed == 0) {
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute(
+                                          builder: (context) => ReviewPage(
+                                                widget.category,
+                                                cards: allCards,
+                                                isAll: false,
+                                              )))
+                                      .then((value) {
+                                    setState(() {
+                                      cards = litBox.CardDBHelper.instance
+                                          .retrieveCards(widget.category.id);
                                     });
-                                  }),
+                                  });
+                                }
+                              },
                             ),
-                          ],
-                        ),
+                          ),
+                          // review all cards button
+                          Padding(
+                              padding:
+                                  const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                              child: InkWell(
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    Image.asset('images/review_all.png',
+                                        width: (size.width / 2) - 16),
+                                    Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 82.0, top: 48.0),
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: <Widget>[
+                                          Text(': کل کلمات',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                  fontFamily: 'Homa')),
+                                          Text(
+                                              CardsPage
+                                                  .replaceWithArabicNumbers(
+                                                      allCards.length
+                                                          .toString()),
+                                              style:
+                                                  TextStyle(fontFamily: 'Homa'))
+                                        ],
+                                      ),
+                                    )
+                                  ],
+                                ),
+                                onTap: () {
+                                  Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (context) => ReviewPage(
+                                            widget.category,
+                                            cards: allCards,
+                                            isAll: true,
+                                          )));
+                                },
+                              )),
+                          // get cards from file button
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                            child: InkWell(
+                              child: Image.asset(
+                                  'images/get_words_from_file.png',
+                                  width: (size.width / 2) - 16),
+                              onTap: () => getCardsFromFile(),
+                            ),
+                          )
+                        ],
                       ),
-                    ),
-                    Card(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text(': کلمات مرور نشده',
-                                style: TextStyle(fontFamily: 'Vazir')),
-                            Text(
-                                WordsPage.replaceWithArabicNumbers(
-                                    forReview.length.toString()),
-                                style: TextStyle(
-                                    fontFamily: 'Vazir',
-                                    color: forReview.length == 0
-                                        ? Colors.green[900]
-                                        : forReview.length <= 20
-                                            ? Colors.amber[700]
-                                            : Colors.red)),
-                            Visibility(
-                              visible: forReview.isNotEmpty,
-                              child: Padding(
-                                padding: const EdgeInsets.only(top: 8.0),
-                                child: RaisedButton(
-                                    child: Text(
-                                      'مرور کلمات مرور نشده',
-                                      style: TextStyle(fontFamily: 'Vazir'),
-                                    ),
-                                    color: Color(0xff24ff71),
-                                    onPressed: () {
-                                      Navigator.of(context)
-                                          .push(MaterialPageRoute(
-                                              builder: (context) => ReviewPage(
-                                                    words: forReview,
-                                                    isAll: false,
-                                                  )))
-                                          .then((value) {
-                                        setState(() {
-                                          words = WordDBHelper.instance
-                                              .retrieveWords();
-                                        });
-                                      });
-                                    }),
+                      // right side cards
+                      Column(
+                        children: [
+                          // review today cards
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                            child: InkWell(
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Image.asset(
+                                      numOfNotReviewed == 0
+                                          ? 'images/new_cards_gray.png'
+                                          : 'images/new_cards.png',
+                                      width: (size.width / 2) - 16),
+                                  Padding(
+                                      padding: const EdgeInsets.only(
+                                          right: 48.0, top: 32.0),
+                                      child: Column(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: <Widget>[
+                                            Text(': کارت های مرور نشده',
+                                                textAlign: TextAlign.center,
+                                                style: TextStyle(
+                                                    fontFamily: 'Homa')),
+                                            Text(
+                                                CardsPage
+                                                    .replaceWithArabicNumbers(
+                                                        numOfNotReviewed
+                                                            .toString()),
+                                                style: TextStyle(
+                                                    fontFamily: 'Homa',
+                                                    color: numOfNotReviewed == 0
+                                                        ? Colors.green[900]
+                                                        : numOfNotReviewed <= 20
+                                                            ? Colors.amber[700]
+                                                            : Colors.red)),
+                                          ])),
+                                ],
                               ),
-                            )
-                          ],
-                        ),
-                      ),
-                    ),
-                    Card(
-                      child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            Text(': تعداد کل کلمات',
-                                style: TextStyle(fontFamily: 'Vazir')),
-                            Text(
-                                WordsPage.replaceWithArabicNumbers(
-                                    allWords.length.toString()),
-                                style: TextStyle(fontFamily: 'Vazir'))
-                          ],
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => saveToFile(),
-                      child: Card(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              Text('گرفتن پشتیبان از کلمات',
-                                  style: TextStyle(fontFamily: 'Vazir')),
-                            ],
+                              onTap: () {
+                                if (numOfNotReviewed != 0) {
+                                  Navigator.of(context)
+                                      .push(MaterialPageRoute(
+                                          builder: (context) => ReviewPage(
+                                                widget.category,
+                                                cards: allCards,
+                                                isAll: false,
+                                              )))
+                                      .then((value) {
+                                    setState(() {
+                                      cards = litBox.CardDBHelper.instance
+                                          .retrieveCards(widget.category.id);
+                                    });
+                                  });
+                                }
+                              },
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      onTap: () => getWordsFromFile(),
-                      child: Card(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              Text(
-                                'وارد کردن کلمات از فایل پشتیبان',
-                                style: TextStyle(fontFamily: 'Vazir'),
-                                textAlign:
-                                    TextAlign.center, // manage text overflow
-                              ),
-                            ],
+                          // save cards to file button
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 4.0, bottom: 4.0),
+                            child: InkWell(
+                              child: Image.asset(
+                                  'images/save_words_to_file.png',
+                                  width: (size.width / 2) - 16),
+                              onTap: () => saveToFile(),
+                            ),
                           ),
-                        ),
-                      ),
-                    ),
-                    InkWell(
-                      child: Card(
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: <Widget>[
-                              Text('تماس با ما',
-                                  style: TextStyle(fontFamily: 'Vazir')),
-                            ],
-                          ),
-                        ),
-                      ),
-                      onTap: () {
-                        Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => ContactUs()));
-                      },
-                    ),
-                  ],
+                          // contact us button
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(top: 4.0, bottom: 8.0),
+                            child: InkWell(
+                              child: Image.asset('images/contact_us.png',
+                                  width: (size.width / 2) - 16),
+                              onTap: () {
+                                Navigator.of(context).push(MaterialPageRoute(
+                                    builder: (context) => ContactUs()));
+                              },
+                            ),
+                          )
+                        ],
+                      )
+                    ],
+                  ),
                 ),
+                // fab
+                floatingActionButton: AnimatedContainer(
+                    duration: Duration(),
+                    child: FloatingActionButton.extended(
+                      heroTag: 'homeFAB',
+                      onPressed: () {
+                        addCard(context);
+                      },
+                      backgroundColor: Colors.pink,
+                      isExtended: _fabExtend,
+                      label: _fabExtend
+                          ? Text('کارت جدید',
+                              style: TextStyle(fontFamily: "Homa"))
+                          : Icon(Icons.add),
+                      icon: _fabExtend ? Icon(Icons.add) : null,
+                    )),
               ),
-              floatingActionButton: AnimatedContainer(
-                  duration: Duration(),
-                  child: FloatingActionButton.extended(
-                    onPressed: () {
-                      addWord(context);
-                    },
-                    backgroundColor: Color(0xff00003f),
-                    isExtended: _fabExtend,
-                    label: _fabExtend
-                        ? Text('کلمه جدید',
-                            style: TextStyle(fontFamily: "Vazir"))
-                        : Icon(Icons.add),
-                    icon: _fabExtend ? Icon(Icons.add) : null,
-                  )),
             );
           } else {
-            // if there is no word
+            // if there is no card
+            // showing no card dialog
             return Container(
-              color: Colors.blue[700],
+              // gradient for background of the page
+              decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                    Color(0xff04cfe2),
+                    Color(0xff0f9dd6),
+                    Color(0xff041554)
+                  ])),
               child: Center(
                   child: Card(
                 color: Colors.white70,
@@ -317,12 +387,12 @@ class _HomePageState extends State<HomePage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
                       Text(
-                        '! هیچ کلمه ای ندارید',
-                        style: TextStyle(fontFamily: 'Vazir'),
+                        '! هیچ کارتی ندارید',
+                        style: TextStyle(fontFamily: 'Homa'),
                       ),
                       RaisedButton.icon(
                           onPressed: () {
-                            addWord(context);
+                            addCard(context);
                           },
                           icon: Icon(
                             Icons.add,
@@ -330,13 +400,13 @@ class _HomePageState extends State<HomePage> {
                           ),
                           color: Colors.blue[900],
                           label: Text(
-                            'افزودن کلمه جدید',
+                            'افزودن کارت جدید',
                             style: TextStyle(
-                                color: Colors.white, fontFamily: 'Vazir'),
+                                color: Colors.white, fontFamily: 'Homa'),
                           )),
                       RaisedButton.icon(
                           onPressed: () {
-                            getWordsFromFile();
+                            getCardsFromFile();
                           },
                           icon: Icon(
                             Icons.insert_drive_file,
@@ -344,9 +414,9 @@ class _HomePageState extends State<HomePage> {
                           ),
                           color: Colors.red[800],
                           label: Text(
-                            'افزودن کلمه از فایل',
+                            'افزودن کارت از فایل',
                             style: TextStyle(
-                                color: Colors.white, fontFamily: 'Vazir'),
+                                color: Colors.white, fontFamily: 'Homa'),
                           ))
                     ],
                   ),
@@ -357,18 +427,19 @@ class _HomePageState extends State<HomePage> {
         });
   }
 
-  void addWord(BuildContext context) async {
-    // go to add word page
+  void addCard(BuildContext context) async {
+    // go to add card page
     Navigator.of(context)
-        .push(MaterialPageRoute(builder: (context) => AddOrEditWord()))
+        .push(MaterialPageRoute(
+            builder: (context) => AddOrEditCard(widget.category.id)))
         .then((value) {
       setState(() {
-        words = WordDBHelper.instance.retrieveWords();
+        cards = litBox.CardDBHelper.instance.retrieveCards(widget.category.id);
       });
     });
   }
 
-  void getWordsFromFile() async {
+  void getCardsFromFile() async {
     if (await Permission.storage.isGranted) {
       try {
         _path = await _importPath;
@@ -376,36 +447,128 @@ class _HomePageState extends State<HomePage> {
           File file = File(_path);
           String jsonStr = await file.readAsString();
 
-          final parsed = jsonDecode(jsonStr).cast<Map<String, dynamic>>();
+          // seperating categoryies and cards
+          List<String> str = jsonStr.split('{/\cardsList/\}');
 
-          List<Word> newWords =
-              parsed.map<Word>((json) => Word.fromJson(json)).toList();
+          // convert json of categories to list of Categories
+          List<Category> newCategories = jsonDecode(str[0])
+              .cast<Map<String, dynamic>>()
+              .map<Category>((json) => Category.fromJson(json))
+              .toList();
 
-          int numOfNews = 0;
-          for (Word w in newWords) {
-            Future f = WordDBHelper.instance.isUnique(-1, w.word);
-            bool unique = true;
-            await f.then((value) {
-              unique = (value.toString() == '[]');
-            });
-            if (unique) {
-              await WordDBHelper.instance.insertWord(w);
-              numOfNews++;
+          // to fix a problem in json
+          str[1] = str[1].replaceAll('][', ',');
+          print(str[1]);
+          // convert json of cards to list of Cards
+          List<litBox.Card> allNewCards = jsonDecode(str[1])
+              .cast<Map<String, dynamic>>()
+              .map<litBox.Card>((json) => litBox.Card.fromJson(json))
+              .toList();
+
+          // combining new categories with current categories
+          await CategoryDBHelper.instance
+              .retrieveCategories()
+              .then((categories) {
+            for (Category c1 in newCategories) {
+              int catId = -2;
+              for (Category c2 in categories) {
+                print('c1: ' + c1.name + '\nc2: ' + c2.name);
+                if (c1.name.trim() == c2.name.trim()) {
+                  catId = c2.id;
+                  break;
+                }
+              }
+              // if the name of category is the same as one of current categories
+              if (catId != -2) {
+                TextEditingController getNameController =
+                    TextEditingController();
+                sameNameDialog(
+                    context,
+                    'نام دسته بندی موجود در فایل با نام دسته بندی شما یکسان است. دسته بندی ها را با هم ادغام میکنید یا اینکه نام آن را تغیر میدهید؟' +
+                        '\n(با ادغام کردن، کارت ها نیز ادغام میشوند)',
+                    title: 'نام دسته بندی ' + c1.name + ' تکراری است.',
+                    negativeAction: () {
+                      // override
+                      for (litBox.Card w in allNewCards) {
+                        if (c1.id == w.id) {
+                          w.id = null;
+                          w.boxLocation = 0;
+                          w.lastReview = null;
+                          litBox.CardDBHelper.instance
+                              .isUnique(-1, w.front, catId)
+                              .then((value) {
+                            if (value.toString() == '[]') {
+                              litBox.CardDBHelper.instance.insertCard(w, catId);
+                            }
+                          });
+                        }
+                      }
+                    },
+                    // cancel
+                    neutralAction: () {},
+                    inputTextController: getNameController,
+                    validReason: isCatNameUnique(getNameController == null
+                        ? ''
+                        : getNameController.text.trim()),
+
+                    // rename new category
+                    positiveAction: () {
+                      c1.name = getNameController == null
+                          ? ''
+                          : getNameController.text.trim();
+
+                      int c1id = c1.id;
+                      c1.id = null;
+                      CategoryDBHelper.instance.insertCategory(c1).then((c2id) {
+                        print('ooo: c2id = ' + c2id.toString());
+                        for (litBox.Card c in allNewCards) {
+                          if (c1id == c.id) {
+                            c.id = null;
+                            c.boxLocation = 0;
+                            c.lastReview = null;
+                            litBox.CardDBHelper.instance.insertCard(c, c2id);
+                          }
+                        }
+                      });
+                    });
+                // name of this category is not duplicate
+              } else {
+                print('ooo: c2id = -2 called.');
+                int c1id = c1.id;
+                c1.id = null;
+                CategoryDBHelper.instance.insertCategory(c1).then((c2id) {
+                  for (litBox.Card w in allNewCards) {
+                    if (c1id == w.id) {
+                      w.id = null;
+                      w.boxLocation = 0;
+                      w.lastReview = null;
+                      litBox.CardDBHelper.instance.insertCard(w, c2id);
+                    }
+                  }
+                });
+              }
             }
-          }
-          createSnackBar(numOfNews == 0
-              ? 'کلمه جدیدی اضافه نشد.'
-              : numOfNews.toString() + 'کلمه جدید اضافه شد ');
-          setState(() {
-            words = WordDBHelper.instance.retrieveWords();
           });
+          widget.refreshCategories();
         }
       } catch (e) {
+        print(e.toString());
         createSnackBar('خطا: \n' + e.toString());
       }
     } else {
+      // request for storage permission
       await Permission.storage.request();
     }
+  }
+
+  // is name of category unique
+  bool isCatNameUnique(String name) {
+    Future f = CategoryDBHelper.instance.isUnique(-1, name);
+    bool unique = true;
+    f.then((value) {
+      unique = (value.toString() == '[]');
+    });
+    return unique;
   }
 
   void saveToFile() async {
@@ -414,7 +577,7 @@ class _HomePageState extends State<HomePage> {
         String path = await _exportPath;
         if (path != null) {
           String folderName = path.substring(path.lastIndexOf('/') + 1);
-          path = await path + '/Leitner_box_words';
+          path = await path + '/Leitner_box_cards';
           bool isExists = true;
 
           int i = 0;
@@ -426,13 +589,25 @@ class _HomePageState extends State<HomePage> {
           final file = File(_path);
 
           String jsonStr;
-          words.then((value3) {
-            jsonStr =
-                jsonEncode(value3, toEncodable: (e) => (e as Word).toMap());
-            file.writeAsString(jsonStr);
+          List<Category> categories;
+          CategoryDBHelper.instance.retrieveCategories().then((value) {
+            categories = value;
+            jsonStr = jsonEncode(categories,
+                toEncodable: (e) => (e as Category).toMap());
+            jsonStr += '{/\cardsList/\}';
+            print(jsonStr);
+            for (Category category in categories) {
+              litBox.CardDBHelper.instance
+                  .retrieveCards(category.id)
+                  .then((value3) {
+                jsonStr += jsonEncode(value3,
+                    toEncodable: (e) => (e as litBox.Card).toMap(category.id));
+                file.writeAsString(jsonStr);
+              });
+            }
             createSnackBar(' فایل پشتیبان با نام' +
-                ' Leitner_box_words' +
-                (i == 0 ? '' : i.toString()) +
+                ' Leitner_box_cards' +
+                (i == 1 ? '' : (i - 1).toString()) +
                 ' در پوشه ' +
                 folderName +
                 ' ذخیره شد. ');
